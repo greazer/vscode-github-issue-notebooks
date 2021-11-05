@@ -140,6 +140,7 @@
 	},
 	"scripts": {
 		"lint": "eslint --config .eslintrc.json ./src/**/*.ts",
+		"create-vsix": "npx vsce package",
 		"vscode:prepublish": "npm run webpack-compile",
 		"webpack-compile": "webpack --mode none",
 		"webpack-watch": "webpack --mode none --watch",
