@@ -4,7 +4,7 @@
 	"description": "GitHub Issue Notebooks for VS Code",
 	"publisher": "ms-vscode",
 	"preview": true,
-	"version": "0.0.112",
+	"version": "0.0.113",
 	"repository": {
 		"url": "https://github.com/microsoft/vscode-github-issue-notebooks"
 	},
@@ -30,6 +30,18 @@
 	"main": "./dist/extension-node.js",
 	"browser": "./dist/extension-web.js",
 	"contributes": {
+		"configuration": {
+			"type": "object",
+			"title": "Github Issues",
+			"properties": {
+				"github-issues.maxToOpenInOneTab": {
+					"type": "number",
+					"default": 50,
+					"description": "Maximum batch size of results to open in a single browser tab",
+					"scope": "resource"
+				}
+			}
+		},
 		"languages": [
 			{
 				"id": "github-issues",
@@ -76,32 +88,46 @@
 				"command": "github-issues.new"
 			},
 			{
-				"title": "Open All In Browser",
-				"command": "github-issues.openAll",
-				"icon": "$(globe)"
+				"title": "Open each result in your browser",
+				"command": "github-issues.openEach",
+				"icon": "$(files)"
 			},
 			{
-				"title": "Open Query In Browser",
-				"command": "github-issues.openUrl",
-				"icon": "$(home)"
+				"title": "Open expanded cell query in browser",
+				"command": "github-issues.openQuery",
+				"icon": "$(question)"
+			},
+			{
+				"title": "Copy expanded cell query to clipboard",
+				"command": "github-issues.copyQueryToClipboard",
+				"icon": "$(copy)"
+			},
+			{
+				"title": "Open specific results in one browser tab",
+				"command": "github-issues.openResultsByNumbers",
+				"icon": "$(zap)"
 			}
 		],
 		"menus": {
 			"commandPalette": [
 				{
-					"command": "github-issues.openAll",
+					"command": "github-issues.openEach",
 					"when": "false"
 				},
 				{
-					"command": "github-issues.openUrl",
+					"command": "github-issues.openQuery",
 					"when": "false"
 				}
 			],
 			"notebook/cell/title": [
 				{
-					"command": "github-issues.openUrl",
-					"alt": "github-issues.openAll",
-					"when": "notebookType == github-issues && notebookCellType == code && notebookCellHasOutputs",
+					"command": "github-issues.openQuery",
+					"when": "notebookType == github-issues && notebookCellType == code",
+					"group": "inline/output@1"
+				},
+				{
+					"command": "github-issues.copyQueryToClipboard",
+					"when": "notebookType == github-issues && notebookCellType == code",
 					"group": "inline/output@1"
 				}
 			],

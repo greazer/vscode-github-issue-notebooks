@@ -14,12 +14,20 @@ import { isRunnable, isUsingAtMe } from './utils';
 
 export const mimeGithubIssues = 'x-application/github-issues';
 
+export type ResultData = {
+	html_url: string;
+	repository_url: string;
+	number: number;
+};
+
+
 // --- running queries
 
 export class IssuesNotebookKernel {
 
 	private readonly _controller: vscode.NotebookController;
 	private _executionOrder = 0;
+	private _config = vscode.workspace.getConfiguration('vscode-github-issue-notebooks');
 
 	constructor(
 		readonly container: ProjectContainer,
@@ -70,16 +78,11 @@ export class IssuesNotebookKernel {
 			return;
 		}
 
-		if (!this.octokit.isAuthenticated) {
-			const atMe = isUsingAtMe(query, project);
-			if (atMe > 0) {
-				const message = atMe > 1
-					? 'This query depends on [`@me`](https://docs.github.com/en/search-github/getting-started-with-searching-on-github/understanding-the-search-syntax#queries-with-usernames) to specify the current user. For that to work you need to be [logged in](command:github-issues.authNow).'
-					: 'This query uses [`@me`](https://docs.github.com/en/search-github/getting-started-with-searching-on-github/understanding-the-search-syntax#queries-with-usernames) to specify the current user. For that to work you need to be [logged in](command:github-issues.authNow).';
-				exec.replaceOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(message, 'text/markdown')]));
-				exec.end(false);
-				return;
-			}
+		if (isUsingAtMe(query) && !this.octokit.isAuthenticated) {
+			const message = 'This query uses [`@me`](https://docs.github.com/en/search-github/getting-started-with-searching-on-github/understanding-the-search-syntax#queries-with-usernames) to specify the current user. For that to work you need to be [logged in](command:github-issues.authNow).';
+			exec.replaceOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(message, 'text/markdown')]));
+			exec.end(false);
+			return;
 		}
 
 		const allQueryData = project.queryData(query);
@@ -114,14 +117,12 @@ export class IssuesNotebookKernel {
 					page += 1;
 				}
 			}
-		} catch (err) {
+		} catch (err: any) {
 			if (err instanceof Error && err.message.includes('Authenticated requests get a higher rate limit')) {
 				// ugly error-message checking for anon-rate-limit. where are the error codes?
-				const message = 'You have exceeded the rate limit for anonymous querying. You can [log in](command:github-issues.authNow) to continue querying.';
+				const message = 'You have exeeded the rate limit for anonymous querying. You can [logged in](command:github-issues.authNow) to continue querying.';
 				exec.replaceOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(message, 'text/markdown')]));
-			} else if (err instanceof Error && err.message.includes('The listed users cannot be searched')) {
-				const message = 'This query uses [`@me`](https://docs.github.com/en/search-github/getting-started-with-searching-on-github/understanding-the-search-syntax#queries-with-usernames) to specify the current user. For that to work you need to be [logged in](command:github-issues.authNow).';
-				exec.replaceOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.text(message, 'text/markdown')]));
+
 			} else {
 				// print as error
 				exec.replaceOutput(new vscode.NotebookCellOutput([vscode.NotebookCellOutputItem.error(err)]));
@@ -206,18 +207,30 @@ export class IssuesNotebookKernel {
 
 export class IssuesStatusBarProvider implements vscode.NotebookCellStatusBarItemProvider {
 
-	provideCellStatusBarItems(cell: vscode.NotebookCell): vscode.NotebookCellStatusBarItem | undefined {
+	provideCellStatusBarItems(cell: vscode.NotebookCell): vscode.NotebookCellStatusBarItem[] | undefined {
 		const count = <number | undefined>cell.outputs[0]?.metadata?.['itemCount'];
 		if (typeof count !== 'number') {
 			return;
 		}
-		const item = new vscode.NotebookCellStatusBarItem(
-			`$(globe) Open ${count} results`,
-			vscode.NotebookCellStatusBarAlignment.Right,
-		);
-		item.command = 'github-issues.openAll';
-		item.tooltip = `Open ${count} results in browser`;
-		return item;
+
+		let openEach = new vscode.NotebookCellStatusBarItem(`$(files) Open ${count} results`, vscode.NotebookCellStatusBarAlignment.Right);
+		openEach.command = 'github-issues.openEach';
+		openEach.tooltip = `Open ${count} results in browser as separate tabs`;
+
+		let openByQuery = new vscode.NotebookCellStatusBarItem(`$(question) Open as query`, vscode.NotebookCellStatusBarAlignment.Right);
+		openByQuery.command = 'github-issues.openQuery';
+		openByQuery.tooltip = `Open ${count} results in browser as a query, which may not accurately reflect these results`;
+
+		let openByNumber = new vscode.NotebookCellStatusBarItem(`$(inbox) Open batch`, vscode.NotebookCellStatusBarAlignment.Right);
+		openByNumber.command = 'github-issues.openResultsByNumbers';
+		openByNumber.tooltip = `Open these specific results in single browser tab via their id numbers. Max can be adjust via the github-issues.maxToOpenInOneTab setting`;
+
+
+
+		const items: vscode.NotebookCellStatusBarItem[] = [
+			openEach, openByNumber, openByQuery
+		];
+		return items;
 	}
 }
 

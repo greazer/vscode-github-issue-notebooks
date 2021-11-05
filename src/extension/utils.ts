@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Node, NodeType, QueryDocumentNode, Utils } from "./parser/nodes";
+import { Node, NodeType, QueryDocumentNode, QueryNode, Utils } from "./parser/nodes";
 import { QualifiedValueNodeSchema, ValuePlaceholderType } from "./parser/symbols";
 import { Project } from "./project";
 
@@ -12,23 +12,33 @@ export interface RepoInfo {
 	repo: string;
 }
 
-export function* getAllRepos(project: Project): Generator<RepoInfo> {
+export function* getRepoInfos(doc: QueryDocumentNode, project: Project, node: QueryNode): Generator<RepoInfo> {
 
 	const repoStrings: string[] = [];
 
-	for (let item of project.all()) {
+	let stack: { node: Node, doc: QueryDocumentNode; }[] = [{ doc, node }];
 
-		Utils.walk(item.node, node => {
-			// check repo-statement
-			if (node._type === NodeType.QualifiedValue && node.qualifier.value === 'repo') {
+	while (stack.length) {
+
+		const { doc, node } = stack.shift()!;
+
+		Utils.walk(node, (node, parent) => {
+
+			if (node._type === NodeType.VariableName && parent?._type !== NodeType.VariableDefinition) {
+				// check variables
+				let symbol = project.symbols.getFirst(node.value);
+				if (symbol) {
+					stack.push({ node: symbol.def, doc: symbol.root });
+				}
+
+			} else if (node._type === NodeType.QualifiedValue && node.qualifier.value === 'repo' && node.value._type !== NodeType.LiteralSequence) {
+				// check repo-statement
 
 				let value: string | undefined;
 				if (node.value._type === NodeType.VariableName) {
-					// repo:$SOME_VAR
 					value = project.symbols.getFirst(node.value.value)?.value;
 				} else {
-					// repo:some_value
-					value = Utils.print(node.value, item.doc.getText(), () => undefined);
+					value = Utils.print(node.value, doc.text, () => undefined);
 				}
 
 				if (value) {
@@ -52,22 +62,13 @@ export function isRunnable(query: QueryDocumentNode): boolean {
 	return query.nodes.some(node => node._type === NodeType.Query || node._type === NodeType.OrExpression);
 }
 
-export function isUsingAtMe(query: Node, project: Project): number {
-	let result = 0;
-	Utils.walk(query, (node, parent) => {
-		if (result === 0) {
-			if (node._type === NodeType.VariableName && parent?._type !== NodeType.VariableDefinition) {
-				// check variables
-				let symbol = project.symbols.getFirst(node.value);
-				if (symbol) {
-					result += 2 * isUsingAtMe(symbol.def, project);
-				}
-
-			} else if (node._type === NodeType.QualifiedValue && node.value._type === NodeType.Literal && node.value.value === '@me') {
-				const info = QualifiedValueNodeSchema.get(node.qualifier.value);
-				if (info?.placeholderType === ValuePlaceholderType.Username) {
-					result = 1;
-				}
+export function isUsingAtMe(query: QueryDocumentNode): boolean {
+	let result = false;
+	Utils.walk(query, node => {
+		if (node._type === NodeType.QualifiedValue && node.value._type === NodeType.Literal && node.value.value === '@me') {
+			const info = QualifiedValueNodeSchema.get(node.qualifier.value);
+			if (info?.placeholderType === ValuePlaceholderType.Username) {
+				result = true;
 			}
 		}
 	});
